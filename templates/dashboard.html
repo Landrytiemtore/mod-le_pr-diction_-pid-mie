@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SysSurv BF — Tableau de bord</title>
+  <link rel="shortcut icon" href="{{ url_for('static', filename='image/favicon.svg') }}" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/dashboard.css') }}">
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+</head>
+<body>
+
+<div class="shell">
+  <!-- ════════════ SIDEBAR ════════════ -->
+  <aside class="sidebar">
+    <div class="sb-brand">
+      <div class="sb-logo">
+        <div class="sb-logo-icon">🩺</div>
+        <div class="sb-logo-text">
+          <strong>SysSurv BF</strong>
+          <span>Surveillance Épidémiologique</span>
+        </div>
+      </div>
+      <div class="sb-version">v2.0 · Random Forest optimisé</div>
+    </div>
+
+    <nav class="sb-nav">
+      <div class="sb-section">Tableau de bord</div>
+      <a class="nav-item active" href="#" onclick="showPage('overview',this)">
+        <span class="nav-icon"></span> Vue d'ensemble
+      </a>
+      <a class="nav-item" href="#" onclick="showPage('map',this)">
+        <span class="nav-icon"></span> Carte régionale
+      </a>
+      <a class="nav-item" href="#" onclick="showPage('trends',this)">
+        <span class="nav-icon"></span> Tendances épidémio.
+        <span class="nav-badge">!</span>
+      </a>
+
+      <div class="sb-section">Intelligence Artificielle</div>
+      <a class="nav-item" href="#" onclick="showPage('predict',this)">
+        <span class="nav-icon"></span> Prédiction ML
+      </a>
+      <a class="nav-item" href="#" onclick="showPage('alerts',this)">
+        <span class="nav-icon"></span> Alertes actives
+      </a>
+
+      <div class="sb-section">Données</div>
+      <a class="nav-item" href="#" onclick="showPage('reports',this)">
+        <span class="nav-icon"></span> Rapports
+      </a>
+      <a class="nav-item" href="#" onclick="showPage('rawdata',this)">
+        <span class="nav-icon"></span> Données brutes
+      </a>
+    </nav>
+
+    <form class="sb-filters" action="{{ url_for('dashboard') }}" method="GET" id="filterForm">
+      <div class="sb-filter-label">Région active</div>
+      <select class="sb-select" name="region" onchange="document.getElementById('filterForm').submit()">
+        {% for r in regions %}
+        <option value="{{ r }}" {% if r == region_active %}selected{% endif %}>{{ r }}</option>
+        {% endfor %}
+      </select>
+
+      <div class="sb-filter-label">Année d'analyse</div>
+      <select class="sb-select" name="annee" onchange="document.getElementById('filterForm').submit()">
+        {% for a in range(2026, 2012, -1) %}
+        <option value="{{ a }}" {% if a == annee_sel %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </form>
+
+    <div class="sb-footer">
+      <strong>Modèles ML :</strong><br>
+      Random Forest (n=150, depth=10)<br>
+      7 régions · 2013–2026<br>
+      Validation : TimeSeriesSplit
+      {% if not modeles_ok %}
+      <br><span style="color:#fca5a5;font-weight:700">⚠️ Modèles non chargés</span>
+      {% endif %}
+    </div>
+  </aside>
+
+  <!-- ════════════ MAIN ════════════ -->
+  <div class="main">
+    <!-- Topbar -->
+    <div class="topbar">
+      <div class="topbar-left">
+        <a href="/" style="color:var(--text-m);font-size:0.78rem">← Accueil</a>
+        <span style="color:var(--border-s)">/</span>
+        <div>
+          <div class="topbar h2" id="topbarTitle" style="font-size:1rem;font-weight:600">Vue d'ensemble</div>
+          <div class="topbar-sub">{{ current_date }} · {{ region_active }} · {{ annee_sel }}</div>
+        </div>
+      </div>
+      <div class="topbar-right">
+        <a href="{{ url_for('api_data_export') }}" class="tb-chip">⬇ Export CSV</a>
+        <button class="tb-chip" onclick="window.location.reload()"> Actualiser</button>
+        <span class="tb-chip accent">{{ annee_sel }}</span>
+      </div>
+    </div>
+
+    <!-- Alert banner -->
+    {% set n_crit = alertes | selectattr('niveau','eq','critique') | list | length %}
+    {% if n_crit > 0 %}
+    <div class="alert-banner" id="alertBanner">
+      🔴 <strong>{{ n_crit }} alerte(s) critique(s)</strong> — Seuil épidémique dépassé. Intervention urgente recommandée.
+      <button class="alert-banner-close" onclick="document.getElementById('alertBanner').style.display='none'">✕</button>
+    </div>
+    {% endif %}
+
+    <!-- Content -->
+    <div class="content">
+
+      <!-- ══════════════════════════════
+           PAGE : VUE D'ENSEMBLE
+           ══════════════════════════════ -->
+      <div id="page-overview" class="page active">
+
+        <!-- Page header -->
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div>
+              <h1>Vue d'ensemble</h1>
+              <p>Indicateurs clés · 7 régions sanitaires · Burkina Faso · {{ current_date }}</p>
+            </div>
+          </div>
+          <span class="page-header-badge">Ministère de la Santé · Burkina Faso</span>
+        </div>
+
+        <!-- KPI Row -->
+        <div class="kpi-row">
+          <div class="kpi-card k-blue">
+            <span class="kpi-bg-icon"></span>
+            <div class="kpi-label">Cas paludisme ({{ annee_sel }})</div>
+            <div class="kpi-value">{{ "{:,}".format(total_palu) }}</div>
+            <div class="kpi-sub">
+              <span class="kpi-delta {% if delta_palu > 0 %}up{% else %}down{% endif %}">
+                {{ "%+.1f"|format(delta_palu) }}%
+              </span>
+              <span class="kpi-sub-label">vs {{ annee_sel - 1 }}</span>
+            </div>
+          </div>
+          <div class="kpi-card k-red">
+            <span class="kpi-bg-icon"></span>
+            <div class="kpi-label">Cas dengue ({{ annee_sel }})</div>
+            <div class="kpi-value">{{ "{:,}".format(total_dengue) }}</div>
+            <div class="kpi-sub">
+              <span class="kpi-delta {% if delta_dengue > 0 %}up{% else %}down{% endif %}">
+                {{ "%+.1f"|format(delta_dengue) }}%
+              </span>
+              <span class="kpi-sub-label">vs {{ annee_sel - 1 }}</span>
+            </div>
+          </div>
+          <div class="kpi-card k-green">
+            <span class="kpi-bg-icon"></span>
+            <div class="kpi-label">Couverture MILDA moy.</div>
+            <div class="kpi-value">{{ milda_moy }}%</div>
+            <div class="kpi-sub">
+              <span class="kpi-delta neu">Objectif : 90%</span>
+            </div>
+          </div>
+          <div class="kpi-card k-amber">
+            <span class="kpi-bg-icon"></span>
+            <div class="kpi-label">Régions en alerte</div>
+            <div class="kpi-value">{{ regions_alerte }} / 7</div>
+            <div class="kpi-sub">
+              <span class="kpi-delta {% if regions_alerte > 2 %}up{% else %}neu{% endif %}">
+                Surveillance active
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts row -->
+        <div class="charts-row-2">
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Évolution mensuelle — {{ region_active }}</div>
+                <div class="card-sub">Paludisme &amp; Dengue · {{ annee_sel }}</div>
+              </div>
+              <div class="card-tags">
+                <span class="tag t-blue">Paludisme</span>
+                <span class="tag t-red">Dengue</span>
+              </div>
+            </div>
+            <div class="chart-wrap"><div id="chartEvolution" style="height:280px"></div></div>
+          </div>
+          <div class="card">
+            <div class="card-head">
+              <div>
+                <div class="card-title">Répartition par région</div>
+                <div class="card-sub">Paludisme · {{ annee_sel }}</div>
+              </div>
+            </div>
+            <div class="chart-wrap"><div id="chartRegions" style="height:280px"></div></div>
+          </div>
+        </div>
+
+        <!-- Table régionale -->
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title"> Tableau de bord régional — {{ annee_sel }}</div>
+              <div class="card-sub">Paludisme · Dengue · MILDA · Pluviométrie · Température · Statut</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Région</th>
+                  <th>Cas paludisme</th>
+                  <th>Cas dengue</th>
+                  <th>MILDA %</th>
+                  <th>Pluie moy.</th>
+                  <th>Temp. moy.</th>
+                  <th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in table_rows %}
+                <tr>
+                  <td><strong>{{ row.region }}</strong></td>
+                  <td>{{ row.palu }}</td>
+                  <td>{{ row.dengue }}</td>
+                  <td>
+                    <div class="milda-bar-wrap">
+                      <div class="milda-track">
+                        <div class="milda-fill" style="
+                          width: {{ row.milda }}%;
+                          background: {{ '#1D9E75' if row.milda|float > 85 else ('#BA7517' if row.milda|float > 70 else '#E24B4A') }};
+                        "></div>
+                      </div>
+                      <span>{{ row.milda }}%</span>
+                    </div>
+                  </td>
+                  <td>{{ row.pluie }} mm</td>
+                  <td>{{ row.temp }} °C</td>
+                  <td>
+                    <span class="status-pill {{ row.niveau }}">
+                      <span class="status-dot {{ row.niveau }}"></span>
+                      {{ row.badge }}
+                    </span>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div><!-- /page-overview -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : CARTE RÉGIONALE
+           ══════════════════════════════ -->
+      <div id="page-map" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Carte régionale</h1><p>Répartition géographique des cas · {{ annee_sel }}</p></div>
+          </div>
+          <span class="page-header-badge">7 Régions surveillées</span>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Carte épidémiologique — Burkina Faso</div>
+              <div class="card-sub">Taille des bulles proportionnelle au nombre de cas</div>
+            </div>
+            <div class="card-tags">
+              <span class="tag t-red">🔴 Critique</span>
+              <span class="tag t-amber">🟡 Alerte</span>
+              <span class="tag t-green">🟢 Stable</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <label style="font-size:0.8rem;font-weight:600;color:var(--text-s)">Maladie :</label>
+            <button class="tab-btn active" id="mapBtnPalu"   onclick="switchMapDisease('palu')"> Paludisme</button>
+            <button class="tab-btn"        id="mapBtnDengue" onclick="switchMapDisease('dengue')"> Dengue</button>
+          </div>
+          <div id="chartMap" style="height:460px"></div>
+          <div class="map-legend">
+            <span>Faible</span>
+            <div class="map-legend-track"></div>
+            <span>Critique</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:12px">Détail par région</div>
+          <div id="regionListMap" class="region-list"></div>
+        </div>
+      </div><!-- /page-map -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : TENDANCES
+           ══════════════════════════════ -->
+      <div id="page-trends" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Tendances épidémiologiques</h1><p>Analyse des séries temporelles 2013–2026</p></div>
+          </div>
+          <span class="page-header-badge">{{ region_active }}</span>
+        </div>
+
+        <div class="card">
+          <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('trends','t-seasonal',this)"> Saisonnalité</button>
+            <button class="tab-btn"        onclick="switchTab('trends','t-annual',this)"> Évolution annuelle</button>
+            <button class="tab-btn"        onclick="switchTab('trends','t-corr',this)"> Corrélation climatique</button>
+            <button class="tab-btn"        onclick="switchTab('trends','t-heat',this)"> Heatmap</button>
+          </div>
+
+          <div id="t-seasonal" class="tab-pane active">
+            <div class="card-title" style="margin-bottom:8px">Saisonnalité moyenne mensuelle — {{ region_active }}</div>
+            <div id="chartSeasonal" style="height:320px"></div>
+            <div class="form-info" style="margin-top:10px">
+               Pic épidémique principal : <strong>juillet–novembre</strong> (semaines 26–46).
+              La saison des pluies (mai–octobre) corrèle fortement avec les cas de paludisme.
+            </div>
+          </div>
+
+          <div id="t-annual" class="tab-pane">
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+              <label style="font-size:0.8rem;font-weight:600;color:var(--text-s)">Maladie :</label>
+              <button class="tab-btn active" id="annBtnPalu"   onclick="switchAnnuelDisease('palu')"> Paludisme</button>
+              <button class="tab-btn"        id="annBtnDengue" onclick="switchAnnuelDisease('dengue')"> Dengue</button>
+            </div>
+            <div id="chartAnnuel" style="height:320px"></div>
+          </div>
+
+          <div id="t-corr" class="tab-pane">
+            <div class="charts-row-2">
+              <div>
+                <div class="card-sub" style="margin-bottom:8px">Pluviométrie → Paludisme · {{ region_active }}</div>
+                <div id="chartCorrPluie" style="height:300px"></div>
+              </div>
+              <div>
+                <div class="card-sub" style="margin-bottom:8px">Température → Paludisme · {{ region_active }}</div>
+                <div id="chartCorrTemp" style="height:300px"></div>
+              </div>
+            </div>
+          </div>
+
+          <div id="t-heat" class="tab-pane">
+            <div class="card-sub" style="margin-bottom:8px">Cas paludisme moyens — région × mois (toutes années)</div>
+            <div id="chartHeatmap" style="height:360px"></div>
+          </div>
+        </div>
+      </div><!-- /page-trends -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : PRÉDICTION ML
+           ══════════════════════════════ -->
+      <div id="page-predict" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Prédiction ML</h1><p>Modèle Random Forest optimisé · Paludisme &amp; Dengue</p></div>
+          </div>
+          <span class="page-header-badge">{% if modeles_ok %} Modèles chargés{% else %} Modèles absents{% endif %}</span>
+        </div>
+
+        <div class="pred-grid">
+          <!-- Formulaire -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px">Paramètres de prédiction</div>
+            <div class="pred-form">
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Région sanitaire</label>
+                  <select class="form-control" id="pRegion">
+                    {% for r in regions %}
+                    <option value="{{ r }}" {% if r == region_active %}selected{% endif %}>{{ r }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Mois</label>
+                  <select class="form-control" id="pMois" onchange="updateSaison()">
+                    {% for m, label in mois_labels.items() %}
+                    <option value="{{ m }}" {% if m == 6 %}selected{% endif %}>{{ label }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <div id="saisonInfo" class="form-info">Saison détectée : <strong> Pluvieuse</strong></div>
+
+              <div class="form-section">Données climatiques actuelles</div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Pluviométrie (mm)</label>
+                  <input class="form-control" type="number" id="pPluie" value="80" min="0" max="200" step="1">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Température (°C)</label>
+                  <input class="form-control" type="number" id="pTemp" value="30" min="15" max="45" step="0.5">
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label">Couverture MILDA (%)</label>
+                  <input class="form-control" type="number" id="pMilda" value="85" min="0" max="100" step="1">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Campagne vaccinale</label>
+                  <select class="form-control" id="pVaccin">
+                    <option value="0">Non </option>
+                    <option value="1">Oui </option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- Lags pluviométrie -->
+              <div>
+                <div class="accordion-header" onclick="toggleAccordion('accPluie')">
+                   Pluviométrie — 4 semaines précédentes
+                  <span id="accPluieIcon">▼</span>
+                </div>
+                <div class="accordion-body" id="accPluie">
+                  <div class="accordion-inner">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">J-1 semaine</label>
+                        <input class="form-control" type="number" id="pL1" value="75" min="0" max="200">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">J-2 semaines</label>
+                        <input class="form-control" type="number" id="pL2" value="60" min="0" max="200">
+                      </div>
+                    </div>
+                    <div class="form-row" style="margin-top:8px">
+                      <div class="form-group">
+                        <label class="form-label">J-3 semaines</label>
+                        <input class="form-control" type="number" id="pL3" value="50" min="0" max="200">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">J-4 semaines</label>
+                        <input class="form-control" type="number" id="pL4" value="40" min="0" max="200">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Lags température -->
+              <div>
+                <div class="accordion-header" onclick="toggleAccordion('accTemp')">
+                   Température — 4 semaines précédentes
+                  <span id="accTempIcon"></span>
+                </div>
+                <div class="accordion-body" id="accTemp">
+                  <div class="accordion-inner">
+                    <div class="form-row">
+                      <div class="form-group">
+                        <label class="form-label">J-1 semaine</label>
+                        <input class="form-control" type="number" id="tL1" value="29" min="15" max="45" step="0.5">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">J-2 semaines</label>
+                        <input class="form-control" type="number" id="tL2" value="28" min="15" max="45" step="0.5">
+                      </div>
+                    </div>
+                    <div class="form-row" style="margin-top:8px">
+                      <div class="form-group">
+                        <label class="form-label">J-3 semaines</label>
+                        <input class="form-control" type="number" id="tL3" value="27" min="15" max="45" step="0.5">
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">J-4 semaines</label>
+                        <input class="form-control" type="number" id="tL4" value="27" min="15" max="45" step="0.5">
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <button class="pred-btn" id="predBtn" onclick="runPrediction()" {% if not modeles_ok %}disabled{% endif %}>
+                 Lancer la prédiction ML
+              </button>
+              {% if not modeles_ok %}
+              <div class="form-info" style="background:var(--red-50);border-color:#fca5a5;color:#991b1b">
+                 Les modèles .pkl sont introuvables dans <code>/model/</code>. Copiez-les et relancez Flask.
+              </div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Résultats -->
+          <div class="card">
+            <div class="card-title" style="margin-bottom:14px">Résultats de la prédiction</div>
+            <div id="predResults">
+              <div class="empty-state">
+                <span class="empty-state-icon"></span>
+                <div class="empty-state-title">En attente de prédiction</div>
+                <div class="empty-state-sub">Configurez les paramètres et lancez la prédiction</div>
+              </div>
+            </div>
+            <div id="predProjection" style="display:none;margin-top:16px">
+              <div class="card-sub" style="margin-bottom:8px"> Projection sur 6 mois</div>
+              <div id="chartProjection" style="height:220px"></div>
+            </div>
+          </div>
+        </div>
+      </div><!-- /page-predict -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : ALERTES
+           ══════════════════════════════ -->
+      <div id="page-alerts" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Alertes actives</h1><p>Surveillance des seuils épidémiques · {{ annee_sel }}</p></div>
+          </div>
+          <span class="page-header-badge">{{ alertes|length }} alerte(s)</span>
+        </div>
+
+        <!-- Compteurs -->
+        <div class="kpi-row" style="margin-bottom:18px">
+          <div class="kpi-card k-red">
+            <span class="kpi-bg-icon">🔴</span>
+            <div class="kpi-label">Alertes critiques</div>
+            <div class="kpi-value">{{ n_critique }}</div>
+          </div>
+          <div class="kpi-card k-amber">
+            <span class="kpi-bg-icon">🟡</span>
+            <div class="kpi-label">Surveillances renforcées</div>
+            <div class="kpi-value">{{ n_warning }}</div>
+          </div>
+          <div class="kpi-card k-green">
+            <span class="kpi-bg-icon">🟢</span>
+            <div class="kpi-label">Régions stables</div>
+            <div class="kpi-value">{{ n_stable }}</div>
+          </div>
+          <div class="kpi-card k-blue">
+            <span class="kpi-bg-icon"></span>
+            <div class="kpi-label">Total alertes</div>
+            <div class="kpi-value">{{ alertes|length }}</div>
+          </div>
+        </div>
+
+        <div class="card">
+          {% if alertes %}
+            {% for a in alertes %}
+            <div class="alert-box {{ a.niveau }}">
+              <div class="alert-box-head">
+                <div class="alert-box-title {{ a.niveau }}">
+                  {{ '🔴' if a.niveau == 'critique' else '🟡' }}
+                  {{ a.niveau|upper }} — {{ a.region }} · {{ a.maladie }}
+                </div>
+                <div class="alert-box-val {{ a.niveau }}">{{ "{:,}".format(a.cas) }} cas/sem.</div>
+              </div>
+              <ul class="alert-actions-list">
+                {% for action in a.actions %}
+                <li>{{ action }}</li>
+                {% endfor %}
+              </ul>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty-state">
+              <span class="empty-state-icon"></span>
+              <div class="empty-state-title">Aucune alerte active</div>
+              <div class="empty-state-sub">Toutes les régions sont en situation stable pour {{ annee_sel }}</div>
+            </div>
+          {% endif %}
+        </div>
+      </div><!-- /page-alerts -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : RAPPORTS
+           ══════════════════════════════ -->
+      <div id="page-reports" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Rapports &amp; Exports</h1><p>Génération de rapports téléchargeables</p></div>
+          </div>
+          <span class="page-header-badge">{{ annee_sel }}</span>
+        </div>
+
+        <div class="card" style="margin-bottom:14px">
+          <div class="card-title" style="margin-bottom:4px"> Export complet des données</div>
+          <div class="card-sub" style="margin-bottom:14px">Historique complet 2013–2026 · Toutes régions</div>
+          <a href="{{ url_for('api_data_export') }}" class="pred-btn" style="display:inline-flex;width:auto;padding:10px 20px">
+             Télécharger le dataset complet (CSV)
+          </a>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="margin-bottom:14px">Rapports disponibles</div>
+          <div class="report-grid">
+            <div class="report-card">
+              <div class="report-card-head">
+                <div class="report-icon blue"></div>
+                <div>
+                  <div class="report-card-name">Synthèse annuelle {{ annee_sel }}</div>
+                  <div class="report-card-meta">CSV · {{ current_date }}</div>
+                </div>
+              </div>
+              <a href="{{ url_for('api_data_export') }}" class="btn-export"> Télécharger</a>
+            </div>
+            <div class="report-card">
+              <div class="report-card-head">
+                <div class="report-icon green"></div>
+                <div>
+                  <div class="report-card-name">Tendances 2013–2026</div>
+                  <div class="report-card-meta">CSV · {{ current_date }}</div>
+                </div>
+              </div>
+              <a href="{{ url_for('api_data_export') }}" class="btn-export"> Télécharger</a>
+            </div>
+            <div class="report-card">
+              <div class="report-card-head">
+                <div class="report-icon amber"></div>
+                <div>
+                  <div class="report-card-name">Rapport prédictions ML</div>
+                  <div class="report-card-meta">CSV · {{ current_date }}</div>
+                </div>
+              </div>
+              <button class="btn-export" onclick="alert('Lancez une prédiction pour générer ce rapport.')"> Générer</button>
+            </div>
+          </div>
+        </div>
+      </div><!-- /page-reports -->
+
+
+      <!-- ══════════════════════════════
+           PAGE : DONNÉES BRUTES
+           ══════════════════════════════ -->
+      <div id="page-rawdata" class="page">
+        <div class="page-header">
+          <div class="page-header-left">
+            <span class="page-header-icon"></span>
+            <div><h1>Données brutes</h1><p>Historique complet · 2013–2026 · 7 régions</p></div>
+          </div>
+          <a href="{{ url_for('api_data_export') }}" class="page-header-badge" style="cursor:pointer"> Export CSV</a>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <div>
+              <div class="card-title">Tableau des indicateurs régionaux — {{ annee_sel }}</div>
+              <div class="card-sub">Agrégation annuelle · 7 régions sanitaires</div>
+            </div>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Région</th><th>Cas paludisme</th><th>Cas dengue</th>
+                  <th>MILDA %</th><th>Pluie moy. (mm)</th><th>Temp. moy. (°C)</th><th>Statut</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for row in table_rows %}
+                <tr>
+                  <td><strong>{{ row.region }}</strong></td>
+                  <td>{{ row.palu }}</td>
+                  <td>{{ row.dengue }}</td>
+                  <td>{{ row.milda }}%</td>
+                  <td>{{ row.pluie }} mm</td>
+                  <td>{{ row.temp }} °C</td>
+                  <td>
+                    <span class="status-pill {{ row.niveau }}">
+                      <span class="status-dot {{ row.niveau }}"></span>{{ row.badge }}
+                    </span>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div><!-- /page-rawdata -->
+
+    </div><!-- /content -->
+
+    <div class="footer">
+      © 2026 · SysSurv BF — Système de Surveillance Épidémiologique · Burkina Faso ·
+      Random Forest optimisé (GridSearchCV · TimeSeriesSplit) · Paludisme &amp; Dengue · 7 régions
+    </div>
+  </div><!-- /main -->
+</div><!-- /shell -->
+
+
+<script>
+/* ════════════════════════════════════════════════════════════════
+   DONNÉES injectées par Flask/Jinja2
+   ════════════════════════════════════════════════════════════════ */
+const D_EVOLUTION    = {{ chart_evolution    | safe }};
+const D_REGIONS      = {{ chart_regions      | safe }};
+const D_SAISONNALITE = {{ chart_saisonnalite | safe }};
+const D_ANNUEL       = {{ chart_annuel       | safe }};
+const D_CORR         = {{ chart_corr         | safe }};
+const D_HEATMAP      = {{ chart_heatmap      | safe }};
+const D_CARTE        = {{ carte_data         | safe }};
+
+const COLORS = {
+  blue:  '#185FA5', blueL: '#378ADD',
+  green: '#1D9E75', greenL:'#6EE7B7',
+  red:   '#E24B4A', amber: '#BA7517',
+  palette: ['#2a78d6','#1baf7a','#e34948','#eda100','#4a3aa7','#e87ba4','#eb6834'],
+};
+const PLOTLY_LAYOUT_BASE = {
+  plot_bgcolor: 'white', paper_bgcolor: 'white',
+  margin: { t:40, b:40, l:55, r:55 },
+  font: { family: "'Inter', sans-serif", size: 12, color: '#475569' },
+  legend: { orientation: 'h', y: -0.2, x: 0.5, xanchor: 'center' },
+};
+
+/* ════════════════════════════════════════════════════════════════
+   NAVIGATION
+   ════════════════════════════════════════════════════════════════ */
+const PAGES = ['overview','map','trends','predict','alerts','reports','rawdata'];
+const PAGE_TITLES = {
+  overview: "Vue d'ensemble", map: "Carte régionale",
+  trends: "Tendances épidémio.", predict: "Prédiction ML",
+  alerts: "Alertes actives", reports: "Rapports", rawdata: "Données brutes",
+};
+
+let chartsInit = {};
+
+function showPage(name, navEl) {
+  PAGES.forEach(p => {
+    const el = document.getElementById('page-'+p);
+    if (el) el.classList.toggle('active', p === name);
+  });
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  if (navEl) navEl.classList.add('active');
+  document.getElementById('topbarTitle').textContent = PAGE_TITLES[name] || name;
+
+  // Init charts on first visit
+  if (!chartsInit[name]) {
+    chartsInit[name] = true;
+    if (name === 'overview') { initChartEvolution(); initChartRegions(); }
+    if (name === 'map')      { initChartMap(); initRegionListMap(); }
+    if (name === 'trends')   { initChartSeasonal(); }
+    if (name === 'alerts')   { /* Jinja2 rendered */ }
+  }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   TABS
+   ════════════════════════════════════════════════════════════════ */
+function switchTab(group, targetId, btn) {
+  const parent = btn.closest('.card') || document;
+  parent.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  parent.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  const t = document.getElementById(targetId);
+  if (t) t.classList.add('active');
+
+  // lazy init
+  if (targetId === 't-annual'  && !chartsInit['t-annual'])  { chartsInit['t-annual']  = true; initChartAnnuel('palu'); }
+  if (targetId === 't-corr'    && !chartsInit['t-corr'])    { chartsInit['t-corr']    = true; initChartCorr(); }
+  if (targetId === 't-heat'    && !chartsInit['t-heat'])    { chartsInit['t-heat']    = true; initChartHeatmap(); }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ACCORDIONS
+   ════════════════════════════════════════════════════════════════ */
+function toggleAccordion(id) {
+  const body = document.getElementById(id);
+  const icon = document.getElementById(id + 'Icon');
+  body.classList.toggle('open');
+  icon.textContent = body.classList.contains('open') ? '▲' : '▼';
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SAISON INFO
+   ════════════════════════════════════════════════════════════════ */
+function updateSaison() {
+  const m = parseInt(document.getElementById('pMois').value);
+  const s = (m >= 5 && m <= 10) ? 'Pluvieuse' : 'Sèche';
+  document.getElementById('saisonInfo').innerHTML = `Saison détectée : <strong>${s}</strong>`;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : ÉVOLUTION MENSUELLE
+   ════════════════════════════════════════════════════════════════ */
+function initChartEvolution() {
+  const traces = [
+    { x: D_EVOLUTION.mois, y: D_EVOLUTION.palu, name: 'Paludisme', type: 'scatter',
+      mode: 'lines+markers', fill: 'tozeroy',
+      fillcolor: 'rgba(55,138,221,0.1)', line: { color: COLORS.blueL, width: 2.5 },
+      marker: { size: 5, color: COLORS.blueL } },
+    { x: D_EVOLUTION.mois, y: D_EVOLUTION.dengue, name: 'Dengue', type: 'scatter',
+      mode: 'lines+markers', fill: 'tozeroy', yaxis: 'y2',
+      fillcolor: 'rgba(226,75,74,0.07)', line: { color: COLORS.red, width: 2, dash: 'dot' },
+      marker: { size: 4, color: COLORS.red } },
+  ];
+  const layout = {
+    ...PLOTLY_LAYOUT_BASE,
+    xaxis: { showgrid: false, tickfont: { color: '#94a3b8' } },
+    yaxis: { title: 'Cas paludisme', gridcolor: '#f1f5f9', titlefont: { color: COLORS.blueL } },
+    yaxis2: { title: 'Cas dengue', overlaying: 'y', side: 'right', showgrid: false, titlefont: { color: COLORS.red } },
+  };
+  Plotly.newPlot('chartEvolution', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : RÉPARTITION RÉGIONALE (Donut)
+   ════════════════════════════════════════════════════════════════ */
+function initChartRegions() {
+  const data = [{
+    type: 'pie', hole: 0.6,
+    labels: D_REGIONS.labels.map(l => l.split('(')[0].trim()),
+    values: D_REGIONS.palu,
+    marker: { colors: COLORS.palette },
+    textinfo: 'percent', textfont: { size: 10 },
+  }];
+  const layout = {
+    ...PLOTLY_LAYOUT_BASE, showlegend: true,
+    legend: { orientation: 'v', x: 1.0, xanchor: 'left', font: { size: 10 } },
+    margin: { t:20, b:20, l:10, r:10 },
+  };
+  Plotly.newPlot('chartRegions', data, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : CARTE (scatter mapbox)
+   ════════════════════════════════════════════════════════════════ */
+let currentMapDisease = 'palu';
+function initChartMap() {
+  renderMap(currentMapDisease);
+}
+function switchMapDisease(d) {
+  currentMapDisease = d;
+  document.getElementById('mapBtnPalu').classList.toggle('active', d === 'palu');
+  document.getElementById('mapBtnDengue').classList.toggle('active', d === 'dengue');
+  renderMap(d);
+}
+function renderMap(disease) {
+  const colorMap = { Critique: COLORS.red, Alerte: COLORS.amber, Stable: COLORS.green };
+  const data = [{
+    type: 'scattermapbox',
+    lat: D_CARTE.map(r => r.lat), lon: D_CARTE.map(r => r.lon),
+    text: D_CARTE.map(r => `<b>${r.region}</b><br>Paludisme: ${r.palu.toLocaleString()}<br>Dengue: ${r.dengue.toLocaleString()}<br>MILDA: ${r.milda}%<br>Statut: ${r.niveau}`),
+    hovertemplate: '%{text}<extra></extra>',
+    marker: {
+      size: D_CARTE.map(r => Math.max(14, Math.min(60, r[disease] / (disease==='palu'?2000:50)))),
+      color: D_CARTE.map(r => colorMap[r.niveau] || COLORS.green),
+      opacity: 0.82,
+    },
+    mode: 'markers',
+  }];
+  const layout = {
+    mapbox: { style: 'carto-positron', center: { lat: 12.3, lon: -1.7 }, zoom: 5.2 },
+    margin: { t:0, b:0, l:0, r:0 }, height: 460,
+    paper_bgcolor: 'white',
+  };
+  Plotly.newPlot('chartMap', data, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   REGION LIST (map page)
+   ════════════════════════════════════════════════════════════════ */
+function initRegionListMap() {
+  const maxPalu = Math.max(...D_CARTE.map(r => r.palu));
+  const sorted = [...D_CARTE].sort((a, b) => b.palu - a.palu);
+  const container = document.getElementById('regionListMap');
+  container.innerHTML = sorted.map(r => {
+    const pct = Math.round(r.palu / maxPalu * 100);
+    const cls = r.niveau === 'Critique' ? 'hot' : (r.niveau === 'Alerte' ? 'warn' : '');
+    const dot = r.niveau === 'Critique' ? COLORS.red : (r.niveau === 'Alerte' ? COLORS.amber : COLORS.green);
+    return `<div class="region-row ${cls}">
+      <span class="status-dot ${r.niveau.toLowerCase()}" style="flex-shrink:0"></span>
+      <span class="region-row-name">${r.region.split('(')[0].trim()}</span>
+      <div class="region-bar-wrap"><div class="region-bar-fill" style="width:${pct}%;background:${dot}"></div></div>
+      <span class="region-row-val">${(r.palu/1000).toFixed(0)}K</span>
+      <span class="region-trend ${r.niveau === 'Critique' || r.niveau === 'Alerte' ? 'up' : 'down'}">
+        ${r.niveau === 'Stable' ? '↓' : '↑'}
+      </span>
+    </div>`;
+  }).join('');
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : SAISONNALITÉ
+   ════════════════════════════════════════════════════════════════ */
+function initChartSeasonal() {
+  const colors = D_SAISONNALITE.palu.map(v =>
+    v > 10000 ? COLORS.red : (v > 6000 ? COLORS.amber : COLORS.green));
+  const data = [{
+    type: 'bar', x: D_SAISONNALITE.mois, y: D_SAISONNALITE.palu,
+    name: 'Paludisme (moy.)', marker: { color: colors, borderRadius: 4 },
+  }];
+  const layout = {
+    ...PLOTLY_LAYOUT_BASE,
+    xaxis: { showgrid: false }, yaxis: { title: 'Cas moyens', gridcolor: '#f1f5f9' },
+    showlegend: false,
+  };
+  Plotly.newPlot('chartSeasonal', data, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : ANNUEL
+   ════════════════════════════════════════════════════════════════ */
+let currentAnnuelDisease = 'palu';
+function switchAnnuelDisease(d) {
+  currentAnnuelDisease = d;
+  document.getElementById('annBtnPalu').classList.toggle('active', d === 'palu');
+  document.getElementById('annBtnDengue').classList.toggle('active', d === 'dengue');
+  initChartAnnuel(d);
+}
+function initChartAnnuel(disease) {
+  const traces = Object.entries(D_ANNUEL).map(([region, data], i) => ({
+    x: data.annees, y: data[disease],
+    name: region.split('(')[0].trim(), type: 'scatter', mode: 'lines+markers',
+    line: { color: COLORS.palette[i % COLORS.palette.length], width: 2 },
+    marker: { size: 4 },
+  }));
+  const layout = {
+    ...PLOTLY_LAYOUT_BASE,
+    xaxis: { showgrid: false, dtick: 1 },
+    yaxis: { title: disease === 'palu' ? 'Cas paludisme' : 'Cas dengue', gridcolor: '#f1f5f9' },
+  };
+  Plotly.newPlot('chartAnnuel', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : CORRÉLATION
+   ════════════════════════════════════════════════════════════════ */
+function initChartCorr() {
+  const tracePluie = {
+    x: D_CORR.pluie, y: D_CORR.palu, type: 'scatter', mode: 'markers',
+    marker: { color: COLORS.blueL, opacity: 0.4, size: 4 }, name: 'Pluie vs Palu',
+  };
+  const traceTemp = {
+    x: D_CORR.temp, y: D_CORR.palu, type: 'scatter', mode: 'markers',
+    marker: { color: COLORS.red, opacity: 0.4, size: 4 }, name: 'Temp vs Palu',
+  };
+  const baseLayout = { ...PLOTLY_LAYOUT_BASE, showlegend: false, margin: { t:20, b:50, l:60, r:20 } };
+  Plotly.newPlot('chartCorrPluie', [tracePluie],
+    { ...baseLayout, xaxis: { title: 'Pluviométrie (mm)', showgrid: false }, yaxis: { title: 'Cas paludisme', gridcolor: '#f1f5f9' } },
+    { responsive: true, displayModeBar: false });
+  Plotly.newPlot('chartCorrTemp', [traceTemp],
+    { ...baseLayout, xaxis: { title: 'Température (°C)', showgrid: false }, yaxis: { title: 'Cas paludisme', gridcolor: '#f1f5f9' } },
+    { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   CHART : HEATMAP
+   ════════════════════════════════════════════════════════════════ */
+function initChartHeatmap() {
+  const data = [{ type: 'heatmap', z: D_HEATMAP.values, x: D_HEATMAP.mois, y: D_HEATMAP.regions,
+    colorscale: [[0,'#e1f5ee'],[0.4,COLORS.blueL],[0.75,COLORS.blue],[1,COLORS.red]],
+    colorbar: { title: 'Cas moy.' } }];
+  const layout = { ...PLOTLY_LAYOUT_BASE, margin: { t:20, b:40, l:160, r:60 },
+    xaxis: { showgrid: false }, yaxis: { showgrid: false } };
+  Plotly.newPlot('chartHeatmap', data, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PRÉDICTION ML — AJAX
+   ════════════════════════════════════════════════════════════════ */
+async function runPrediction() {
+  const btn = document.getElementById('predBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span> Calcul en cours…';
+
+  const payload = {
+    region:     document.getElementById('pRegion').value,
+    mois:       parseInt(document.getElementById('pMois').value),
+    pluie:      parseFloat(document.getElementById('pPluie').value),
+    temp:       parseFloat(document.getElementById('pTemp').value),
+    milda:      parseFloat(document.getElementById('pMilda').value),
+    vaccin:     parseInt(document.getElementById('pVaccin').value),
+    pluie_lags: [
+      parseFloat(document.getElementById('pL1').value),
+      parseFloat(document.getElementById('pL2').value),
+      parseFloat(document.getElementById('pL3').value),
+      parseFloat(document.getElementById('pL4').value),
+    ],
+    temp_lags: [
+      parseFloat(document.getElementById('tL1').value),
+      parseFloat(document.getElementById('tL2').value),
+      parseFloat(document.getElementById('tL3').value),
+      parseFloat(document.getElementById('tL4').value),
+    ],
+  };
+
+  try {
+    const resp = await fetch('/api/predict', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (data.error) {
+      document.getElementById('predResults').innerHTML = `
+        <div class="alert-box critique">
+          <div class="alert-box-title critique"> Erreur</div>
+          <div style="font-size:0.82rem;color:#991b1b;margin-top:6px">${data.error}</div>
+        </div>`;
+      return;
+    }
+
+    renderPredResults(data);
+    renderProjectionChart(data.projection);
+
+  } catch(e) {
+    document.getElementById('predResults').innerHTML = `
+      <div class="alert-box critique">
+        <div class="alert-box-title critique"> Erreur réseau</div>
+        <div style="font-size:0.82rem;color:#991b1b;margin-top:6px">${e.message}</div>
+      </div>`;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = 'Lancer la prédiction ML';
+  }
+}
+
+function renderPredResults(data) {
+  const niveauLabels = { critique:'Alerte critique', warning:'Surveillance renforcée', stable:'Situation stable' };
+  const icons = { critique:'🔴', warning:'🟡', stable:'🟢' };
+
+  function alertBlock(maladie, pred, niveau, actions) {
+    const acts = actions.map(a => `<li>${a}</li>`).join('');
+    return `<div class="alert-box ${niveau}">
+      <div class="alert-box-head">
+        <div class="alert-box-title ${niveau}">${icons[niveau]} ${maladie} — ${niveauLabels[niveau]}</div>
+        <div class="alert-box-val ${niveau}">${pred.toLocaleString()} cas</div>
+      </div>
+      <ul class="alert-actions-list">${acts}</ul>
+    </div>`;
+  }
+
+  document.getElementById('predResults').innerHTML = `
+    <div style="font-size:0.8rem;color:var(--text-m);margin-bottom:12px">
+       <strong>${data.region}</strong> · ${data.mois} · ${data.saison}
+    </div>
+    ${alertBlock(' Paludisme', data.paludisme.prediction, data.paludisme.niveau, data.paludisme.actions)}
+    ${alertBlock(' Dengue', data.dengue.prediction,    data.dengue.niveau,    data.dengue.actions)}
+  `;
+  document.getElementById('predProjection').style.display = 'block';
+}
+
+function renderProjectionChart(proj) {
+  const mois   = proj.map(p => p.mois);
+  const paluVals   = proj.map(p => p.palu);
+  const dengVals   = proj.map(p => p.dengue);
+  const traces = [
+    { x: mois, y: paluVals, name: 'Paludisme', type: 'scatter', mode: 'lines+markers',
+      line: { color: COLORS.blueL, width: 2.5 }, marker: { size: 5 } },
+    { x: mois, y: dengVals, name: 'Dengue', type: 'scatter', mode: 'lines+markers',
+      line: { color: COLORS.red, width: 2, dash: 'dot' }, marker: { size: 4 }, yaxis: 'y2' },
+  ];
+  const layout = {
+    ...PLOTLY_LAYOUT_BASE, height: 220,
+    margin: { t:20, b:50, l:55, r:55 },
+    xaxis: { showgrid: false },
+    yaxis:  { title: 'Palu', gridcolor: '#f1f5f9', titlefont: { color: COLORS.blueL, size: 10 } },
+    yaxis2: { title: 'Dengue', overlaying: 'y', side: 'right', showgrid: false, titlefont: { color: COLORS.red, size: 10 } },
+  };
+  Plotly.newPlot('chartProjection', traces, layout, { responsive: true, displayModeBar: false });
+}
+
+/* ════════════════════════════════════════════════════════════════
+   INITIALISATION AU CHARGEMENT
+   ════════════════════════════════════════════════════════════════ */
+document.addEventListener('DOMContentLoaded', () => {
+  // Page overview charts (active par défaut)
+  chartsInit['overview'] = true;
+  initChartEvolution();
+  initChartRegions();
+  updateSaison();
+});
+</script>
+
+<style>
+/* Styles locaux complémentaires */
+.page { display: none; }
+.page.active { display: block; }
+</style>
+
+</body>
+</html>
