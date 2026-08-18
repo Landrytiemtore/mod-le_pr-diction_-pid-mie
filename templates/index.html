@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SysSurv BF — Surveillance Épidémiologique · Burkina Faso</title>
+  <link rel="shortcut icon" href="{{ url_for('static', filename='image/favicon.svg') }}" type="image/x-icon">
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+  <!-- ── NAVBAR ── -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-inner">
+      <a href="#" class="nav-logo">
+        <span class="logo-icon">🩺</span>
+        <span class="logo-text">Epidemic Tracking<span class="logo-bf"> BF</span></span>
+      </a>
+      <ul class="nav-links">
+        <li><a href="#fonctionnalites">Fonctionnalités</a></li>
+        <li><a href="#regions">Couverture</a></li>
+        <li><a href="#stats">Données</a></li>
+        <li><a href="#technologie">Technologie</a></li>
+      </ul>
+      <a href="{{ url_for('dashboard') }}" class="btn-nav" id="btnNavDash" target="_blank">
+        Ouvrir le dashboard →
+      </a>
+    </div>
+  </nav>
+
+  <!-- ── HERO ── -->
+  <section class="hero" id="hero">
+    <div class="hero-bg">
+      <div class="pulse-ring ring-1"></div>
+      <div class="pulse-ring ring-2"></div>
+      <div class="pulse-ring ring-3"></div>
+      <div class="grid-overlay"></div>
+    </div>
+
+    <div class="hero-content">
+      <div class="hero-eyebrow" data-reveal>
+        <span class="dot-live"></span>
+        Surveillance en temps réel · Burkina Faso · 2013–2026
+      </div>
+
+      <h1 class="hero-title" data-reveal>
+        Anticiper les épidémies.<br/>
+        <span class="title-accent">Protéger les populations.</span>
+      </h1>
+
+      <p class="hero-sub" data-reveal>
+        Plateforme d'intelligence épidémiologique pour le suivi du paludisme et de la dengue
+        dans les 7 régions sanitaires du Burkina Faso — propulsée par des modèles
+        Random Forest entraînés sur 13 ans de données terrain.
+      </p>
+
+      <div class="hero-actions" data-reveal>
+        <a href="{{ url_for('dashboard') }}" class="btn-primary" target="_blank">
+          <span>Accéder au dashboard</span>
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+        <a href="#fonctionnalites" class="btn-secondary">Découvrir les fonctionnalités</a>
+      </div>
+
+      <!-- Hero KPI strip -->
+      <div class="hero-kpis" data-reveal>
+        <div class="hkpi">
+          <span class="hkpi-num" data-count="7">0</span>
+          <span class="hkpi-label">Régions couvertes</span>
+        </div>
+        <div class="hkpi-sep"></div>
+        <div class="hkpi">
+          <span class="hkpi-num" data-count="13">0</span>
+          <span class="hkpi-label">Années de données</span>
+        </div>
+        <div class="hkpi-sep"></div>
+        <div class="hkpi">
+          <span class="hkpi-num" data-count="150">0</span>
+          <span class="hkpi-label">Arbres de décision</span>
+        </div>
+        <div class="hkpi-sep"></div>
+        <div class="hkpi">
+          <span class="hkpi-num" data-count="2">0</span>
+          <span class="hkpi-label">Maladies surveillées</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Map illustration -->
+    <div class="hero-map" aria-hidden="true">
+      <svg class="map-svg" viewBox="0 0 380 420" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <!-- Simplified BF silhouette -->
+        <path class="map-country" d="M60 80 L100 55 L160 50 L200 60 L250 55 L300 75 L320 110 L330 150 L310 190 L320 230 L300 270 L270 300 L240 330 L200 350 L160 340 L130 310 L100 290 L70 260 L50 220 L45 180 L55 140 Z" />
+        <!-- Region dots -->
+        <circle class="map-dot critical" cx="185" cy="200" r="18" />
+        <circle class="map-dot critical" cx="120" cy="280" r="14" />
+        <circle class="map-dot warning" cx="240" cy="130" r="12" />
+        <circle class="map-dot stable" cx="270" cy="200" r="10" />
+        <circle class="map-dot stable" cx="155" cy="130" r="10" />
+        <circle class="map-dot stable" cx="110" cy="180" r="9" />
+        <circle class="map-dot stable" cx="200" cy="270" r="9" />
+        <!-- Labels -->
+        <text class="map-label" x="185" y="204" text-anchor="middle">Ouaga</text>
+        <text class="map-label" x="120" y="284" text-anchor="middle">Bobo</text>
+        <text class="map-label" x="240" y="134" text-anchor="middle">Sahel</text>
+        <!-- Pulse animation rings on critical dots -->
+        <circle class="map-pulse" cx="185" cy="200" r="22" />
+        <circle class="map-pulse delay-1" cx="120" cy="280" r="18" />
+      </svg>
+    </div>
+  </section>
+
+  <!-- ── FEATURES ── -->
+  <section class="section" id="fonctionnalites">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag">Fonctionnalités</span>
+        <h2 class="section-title">Un dashboard complet pour les décideurs sanitaires</h2>
+        <p class="section-desc">Sept modules intégrés pour surveiller, analyser et anticiper.</p>
+      </div>
+
+      <div class="features-grid">
+
+        <div class="feature-card card-large" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Vue d'ensemble</h3>
+          <p>Tableau de bord principal avec KPIs en temps réel, évolution mensuelle filtrée par région et répartition géographique des cas. Un coup d'œil suffit pour évaluer la situation sanitaire nationale.</p>
+          <ul class="fc-list">
+            <li>Cas paludisme &amp; dengue agrégés</li>
+            <li>Comparaison inter-annuelle automatique</li>
+            <li>Taux de couverture MILDA</li>
+          </ul>
+        </div>
+
+        <div class="feature-card" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Carte régionale</h3>
+          <p>Visualisation géographique interactive des foyers épidémiques sur une carte du Burkina Faso avec codage couleur par niveau d'alerte.</p>
+        </div>
+
+        <div class="feature-card" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Tendances épidémio.</h3>
+          <p>Analyse des séries temporelles 2013–2026 : saisonnalité, corrélations climatiques, heatmap région × mois et évolution annuelle multi-maladies.</p>
+        </div>
+
+        <div class="feature-card card-accent" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Prédiction ML</h3>
+          <p>Moteur Random Forest à 150 arbres pour prévoir les cas sur 6 mois selon les conditions climatiques, la couverture MILDA et les données rétrospectives.</p>
+          <div class="fc-badge">Random Forest · n=150 · depth=10</div>
+        </div>
+
+        <div class="feature-card" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Alertes actives</h3>
+          <p>Système de surveillance des seuils épidémiques avec classification automatique en trois niveaux : stable, alerte et critique.</p>
+        </div>
+
+        <div class="feature-card" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Rapports &amp; Exports</h3>
+          <p>Génération et téléchargement de rapports CSV : synthèse annuelle, tendances mensuelles et extraction complète du dataset de surveillance.</p>
+        </div>
+
+        <div class="feature-card" data-reveal>
+          <div class="fc-icon"></div>
+          <h3>Données brutes</h3>
+          <p>Exploration interactive du dataset avec filtres multi-critères (région, période, mois) et statistiques descriptives dynamiques.</p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── REGIONS COVERAGE ── -->
+  <section class="section section-dark" id="regions">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag tag-light">Couverture</span>
+        <h2 class="section-title light">7 régions sanitaires surveillées</h2>
+        <p class="section-desc light">Du Sahel au Sud-Ouest, chaque district bénéficie d'un suivi personnalisé.</p>
+      </div>
+
+      <div class="regions-grid" id="regionsGrid">
+        <!-- Rempli par JS -->
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATS BANDE ── -->
+  <section class="stats-band" id="stats">
+    <div class="container">
+      <div class="stats-row">
+        <div class="stat-item" data-reveal>
+          <span class="stat-num" data-count="97552">0</span>
+          <span class="stat-unit">enregistrements</span>
+          <span class="stat-label">Dataset de surveillance complet</span>
+        </div>
+        <div class="stat-item" data-reveal>
+          <span class="stat-num" data-count="52">0</span>
+          <span class="stat-unit">semaines / an</span>
+          <span class="stat-label">Granularité de suivi hebdomadaire</span>
+        </div>
+        <div class="stat-item" data-reveal>
+          <span class="stat-num" data-count="90">0</span>
+          <span class="stat-unit">% MILDA</span>
+          <span class="stat-label">Objectif couverture moustiquaires</span>
+        </div>
+        <div class="stat-item" data-reveal>
+          <span class="stat-num" data-count="2">0</span>
+          <span class="stat-unit">modèles ML</span>
+          <span class="stat-label">Paludisme &amp; dengue indépendants</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TECH STACK ── -->
+  <section class="section" id="technologie">
+    <div class="container">
+      <div class="section-header" data-reveal>
+        <span class="section-tag">Technologie</span>
+        <h2 class="section-title">Construit sur des fondations solides</h2>
+      </div>
+
+      <div class="tech-grid">
+        <div class="tech-card" data-reveal>
+          <div class="tech-logo python">Py</div>
+          <h4>Python 3</h4>
+          <p>Traitement des données, modélisation ML et génération des rapports.</p>
+        </div>
+        <div class="tech-card" data-reveal>
+          <div class="tech-logo streamlit">Fl</div>
+          <h4>Flask</h4>
+          <p>Interface interactive du dashboard déployable en un clic.</p>
+        </div>
+        <div class="tech-card" data-reveal>
+          <div class="tech-logo plotly">Pl</div>
+          <h4>Plotly</h4>
+          <p>Visualisations dynamiques, interactives et exportables.</p>
+        </div>
+        <div class="tech-card" data-reveal>
+          <div class="tech-logo sklearn">Sk</div>
+          <h4>scikit-learn</h4>
+          <p>Random Forest avec validation par TimeSeriesSplit et GridSearchCV.</p>
+        </div>
+        <div class="tech-card" data-reveal>
+          <div class="tech-logo pandas">Pd</div>
+          <h4>Pandas / NumPy</h4>
+          <p>Manipulation, agrégation et analyse des séries temporelles épidémiologiques.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── CTA FINAL ── -->
+  <section class="cta-section">
+    <div class="container">
+      <div class="cta-box" data-reveal>
+        <div class="cta-inner">
+          <h2>Prêt à surveiller les épidémies ?</h2>
+          <p>Le dashboard est opérationnel. Accédez aux données en temps réel et lancez vos premières prédictions.</p>
+          <a href="{{ url_for('dashboard') }}" class="btn-primary btn-large" target="_blank">
+            <span>Ouvrir Epidemic Tracking BF</span>
+            <svg width="18" height="18" viewBox="0 0 16 16" fill="none"><path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ── -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-inner">
+        <div class="footer-brand">
+         <span class="logo-icon">🩺</span>
+          <span class="logo-text">Epidemic Tracking<span class="logo-bf"> BF</span></span>
+        </div>
+        <p class="footer-copy">
+          © 2026 · Système de Surveillance Épidémiologique — Burkina Faso<br/>
+          Modèles Random Forest · Paludisme &amp; Dengue · 7 régions sanitaires
+        </p>
+        <div class="footer-links">
+          <a href="{{ url_for('dashboard') }}" target="_blank">Dashboard</a>
+          <span>·</span>
+          <a href="#fonctionnalites">Fonctionnalités</a>
+          <span>·</span>
+          <a href="#technologie">Technologie</a>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/script.js') }}" defer></script>
+</body>
+</html>
